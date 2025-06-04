@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Войти через Telegram</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- SDK должен подключаться первым и с ?57 (актуальная версия) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Telegram Web App SDK (актуальная версия ?57) -->
   <script src="https://telegram.org/js/telegram-web-app.js?57" defer></script>
   <style>
     body {
@@ -34,65 +34,86 @@
 </head>
 <body>
   <h1>Войти через Telegram</h1>
-  <div id="info">Инициализация...</div>
+  <!-- Изначально показываем диагностическое сообщение -->
+  <div id="info">Инициализация…</div>
   <div id="container"></div>
 
-  <!-- Весь JS запускаем только после загрузки DOM и SDK -->
   <script defer>
     window.addEventListener('DOMContentLoaded', () => {
-      const backUrl = 'https://b765-84-19-3-112.ngrok-free.app/login/telegram';
+      // URL вашего бэкенда, который обрабатывает авторизацию
+      const backUrl = 'https://ваш-домен/login/telegram';
       const info = document.getElementById('info');
       const container = document.getElementById('container');
 
-      // Если WebApp SDK уже загружен и доступен — запускаем мини-приложение
-      if (window.Telegram?.WebApp) {
+      // Функция ждёт, пока подключится Telegram Web App SDK
+      const waitForSdk = (cb) => {
+        if (window.Telegram?.WebApp) {
+          return cb();
+        }
+        setTimeout(() => waitForSdk(cb), 50);
+      };
+
+      waitForSdk(() => {
         const tg = Telegram.WebApp;
         tg.ready();
 
-        // Получаем информацию о пользователе (если есть)
-        const user = tg.initDataUnsafe?.user ?? {};
-        info.textContent = `Привет, ${user.first_name ?? 'друг'}! Нажмите кнопку для авторизации.`;
+        // Проверяем, зашли ли мы именно из Telegram Mini-App
+        const insideMiniApp = Boolean(tg.initData && tg.initData.length);
 
-        // Создаём кнопку «Авторизоваться»
-        const btn = document.createElement('button');
-        btn.className = 'telegram-button';
-        btn.textContent = 'Авторизоваться';
-        container.appendChild(btn);
+        if (insideMiniApp) {
+          // ===== ВЕТКА MINI-APP =====
+          const user = tg.initDataUnsafe?.user ?? {};
+          // Обязательно использовать **обратные кавычки** (`…`) для шаблонных строк
+          info.textContent = `Привет, ${user.first_name ?? 'друг'}! Нажмите кнопку для авторизации.`;
 
-        btn.addEventListener('click', async () => {
-          btn.disabled = true;
-          info.textContent = 'Авторизуемся…';
-          try {
-            const params = new URLSearchParams({ init_data: tg.initData });
-            const resp = await fetch(backUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: params
-            });
+          const btn = document.createElement('button');
+          btn.className = 'telegram-button';
+          btn.textContent = 'Авторизоваться';
+          container.appendChild(btn);
 
-            if (!resp.ok) throw new Error(await resp.text());
-            info.textContent = '✅ Вы успешно вошли!';
-            // При желании можно закрыть мини-приложение: tg.close();
-          } catch (err) {
-            info.textContent = `Ошибка: ${err.message}`;
-            btn.disabled = false;
-          }
-        });
-      }
-      // Иначе — обычный браузер, подключаем виджет Telegram-кнопки
-      else {
-        info.textContent = 'Нажмите кнопку ниже для входа через Telegram:';
-        const widget = document.createElement('script');
-        widget.src = 'https://telegram.org/js/telegram-widget.js?22';
-        widget.async = true;
-        widget.setAttribute('data-telegram-login', 'TestMausTBot');
-        widget.setAttribute('data-size', 'large');
-        widget.setAttribute('data-userpic', 'false');
-        widget.setAttribute('data-lang', 'ru');
-        widget.setAttribute('data-auth-url', backUrl);
-        widget.setAttribute('data-request-access', 'write');
-        container.appendChild(widget);
-      }
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            info.textContent = 'Авторизуемся…';
+
+            try {
+              // Отправляем POST с init_data на сервер
+              const params = new URLSearchParams({ init_data: tg.initData });
+              const resp = await fetch(backUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params
+              });
+
+              if (!resp.ok) {
+                // Если сервер вернул не 2xx, покажем текст ошибки
+                throw new Error(await resp.text());
+              }
+              info.textContent = '✅ Вы успешно вошли!';
+              // tg.close(); // если нужно закрыть мини-приложение
+            } catch (err) {
+              info.textContent = `Ошибка: ${err.message}`;
+              btn.disabled = false;
+            }
+          });
+        } else {
+          // ===== ВЕТКА ОБЫЧНОГО БРАУЗЕРА =====
+          // Обновляем информационный текст
+          info.textContent = 'Нажмите кнопку ниже для входа через Telegram:';
+
+          // Создаём Telegram-виджет динамически
+          const widget = document.createElement('script');
+          widget.src = 'https://telegram.org/js/telegram-widget.js?22';
+          widget.async = true;
+          // **ЗДЕСЬ ОБЯЗАТЕЛЬНО** указывать точное имя вашего бота из BotFather
+          widget.setAttribute('data-telegram-login', 'TestMaustBot');
+          widget.setAttribute('data-size', 'large');
+          widget.setAttribute('data-userpic', 'false');
+          widget.setAttribute('data-lang', 'ru');
+          widget.setAttribute('data-auth-url', backUrl);
+          widget.setAttribute('data-request-access', 'write');
+          container.appendChild(widget);
+        }
+      });
     });
   </script>
 </body>
