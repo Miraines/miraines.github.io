@@ -4,89 +4,95 @@
   <meta charset="UTF-8">
   <title>Войти через Telegram</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- SDK должен подключаться ПЕРВЫМ и с ?57 (актуальная версия) -->
+  <!-- SDK должен подключаться первым и с ?57 (актуальная версия) -->
   <script src="https://telegram.org/js/telegram-web-app.js?57" defer></script>
-
   <style>
-    body{font-family:sans-serif;padding:20px;background:#f9f9f9}
-    h1{color:#333}
-    #info{margin-bottom:20px}
-    .telegram-button{padding:10px 20px;background:#0088cc;color:#fff;border:0;border-radius:5px;cursor:pointer}
-    .telegram-button:disabled{background:#aaa;cursor:not-allowed}
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      color: #333;
+    }
+    #info {
+      margin-bottom: 20px;
+    }
+    .telegram-button {
+      padding: 10px 20px;
+      background: #0088cc;
+      color: #fff;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .telegram-button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
   <h1>Войти через Telegram</h1>
-  <div id="info">Проверяем среду запуска…</div>
+  <div id="info">Инициализация...</div>
   <div id="container"></div>
 
-  <!-- Весь JS запускаем ТОЛЬКО после загрузки DOM и SDK -->
+  <!-- Весь JS запускаем только после загрузки DOM и SDK -->
   <script defer>
     window.addEventListener('DOMContentLoaded', () => {
+      const backUrl = 'https://b765-84-19-3-112.ngrok-free.app/login/telegram';
+      const info = document.getElementById('info');
+      const container = document.getElementById('container');
 
-      const waitForSdk = (cb) => {
-        if (window.Telegram?.WebApp) return cb();
-        setTimeout(() => waitForSdk(cb), 50);
-      };
-
-      waitForSdk(() => {
+      // Если WebApp SDK уже загружен и доступен — запускаем мини-приложение
+      if (window.Telegram?.WebApp) {
         const tg = Telegram.WebApp;
-        tg.ready();                                        // обязательный вызов  :contentReference[oaicite:1]{index=1}
+        tg.ready();
 
-        const backUrl   = 'https://b765-84-19-3-112.ngrok-free.app/login/telegram';
-        const info      = document.getElementById('info');
-        const container = document.getElementById('container');
+        // Получаем информацию о пользователе (если есть)
+        const user = tg.initDataUnsafe?.user ?? {};
+        info.textContent = `Привет, ${user.first_name ?? 'друг'}! Нажмите кнопку для авторизации.`;
 
-        /* ---------- Определяем, где мы ---------- */
-        const insideMiniApp = Boolean(tg.initData && tg.initData.length);   // главное условие
+        // Создаём кнопку «Авторизоваться»
+        const btn = document.createElement('button');
+        btn.className = 'telegram-button';
+        btn.textContent = 'Авторизоваться';
+        container.appendChild(btn);
 
-        if (insideMiniApp) {
-          /* ===== ВЕТКА MINI-APP ===== */
-          const user = tg.initDataUnsafe?.user ?? {};
-          info.textContent = Привет, ${user.first_name ?? 'друг'}! Нажмите кнопку для авторизации.;
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          info.textContent = 'Авторизуемся…';
+          try {
+            const params = new URLSearchParams({ init_data: tg.initData });
+            const resp = await fetch(backUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: params
+            });
 
-          const btn = document.createElement('button');
-          btn.className = 'telegram-button';
-          btn.textContent = 'Авторизоваться';
-          container.appendChild(btn);
-
-          btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            info.textContent = 'Авторизуемся…';
-
-            try {
-              const params = new URLSearchParams({ init_data: tg.initData });
-              const resp = await fetch(backUrl, {
-                method : 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body   : params
-              });
-
-              if (!resp.ok) throw new Error(await resp.text());
-              info.textContent = '✅ Вы успешно вошли!';
-              // tg.close();  // можно закрыть мини-апп при необходимости
-            } catch (err) {
-              info.textContent = Ошибка: ${err.message};
-              btn.disabled = false;
-            }
-          });
-
-        } else {
-          /* ===== ВЕТКА ОБЫЧНОГО БРАУЗЕРА ===== */
-          info.textContent = 'Нажмите кнопку ниже для входа через Telegram:';
-
-          const widget = document.createElement('script');
-          widget.src   = 'https://telegram.org/js/telegram-widget.js?22';
-          widget.async = true;
-          widget.setAttribute('data-telegram-login', 'TestMausTBot');
-          widget.setAttribute('data-size',           'large');
-          widget.setAttribute('data-userpic',        'false');
-          widget.setAttribute('data-lang',           'ru');
-          widget.setAttribute('data-auth-url',       backUrl);
-          widget.setAttribute('data-request-access', 'write');
-          container.appendChild(widget);
-        }
-      });
+            if (!resp.ok) throw new Error(await resp.text());
+            info.textContent = '✅ Вы успешно вошли!';
+            // При желании можно закрыть мини-приложение: tg.close();
+          } catch (err) {
+            info.textContent = `Ошибка: ${err.message}`;
+            btn.disabled = false;
+          }
+        });
+      }
+      // Иначе — обычный браузер, подключаем виджет Telegram-кнопки
+      else {
+        info.textContent = 'Нажмите кнопку ниже для входа через Telegram:';
+        const widget = document.createElement('script');
+        widget.src = 'https://telegram.org/js/telegram-widget.js?22';
+        widget.async = true;
+        widget.setAttribute('data-telegram-login', 'TestMausTBot');
+        widget.setAttribute('data-size', 'large');
+        widget.setAttribute('data-userpic', 'false');
+        widget.setAttribute('data-lang', 'ru');
+        widget.setAttribute('data-auth-url', backUrl);
+        widget.setAttribute('data-request-access', 'write');
+        container.appendChild(widget);
+      }
     });
   </script>
 </body>
